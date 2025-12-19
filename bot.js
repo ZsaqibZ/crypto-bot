@@ -52,9 +52,9 @@ const PAIRS = [
 
 const CONFIG = {
     capitalPerPair: 25.0,  // $25 per pair
-    entryZ: 2.0,           // Signal Strength
+    entryZ: 0.5,           // Signal Strength
     exitZ: 0.0,            // Mean Reversion
-    stopLossZ: 4.5         // Structural Break
+    stopLossZ: 4         // Structural Break
 };
 
 // --- 2. GLOBAL STATE ---
@@ -261,3 +261,4 @@ function exitVirtualTrade(pairName, currentY, currentX, reason) {
 const exchange = new ccxt.binance();
 console.log(`Starting ${PAIRS.length} Pairs...`);
 PAIRS.forEach(p => runPair(exchange, p[0], p[1]));
+
