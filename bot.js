@@ -3,15 +3,15 @@ const ccxt = require('ccxt');
 const colors = require('colors');
 
 // --- 1. CONFIGURATION ---
-// EXPANDED LIST: 30 Correlated Pairs (Sector-Based)
+// 30 Correlated Pairs (Sector-Based)
 const PAIRS = [
-    // --- THE KINGS (High Correlation, Low Volatility) ---
+    // --- THE KINGS ---
     ['ETH/USDT', 'BTC/USDT'],
     ['BNB/USDT', 'BTC/USDT'],
     ['LTC/USDT', 'BTC/USDT'],
     ['BCH/USDT', 'BTC/USDT'],
     
-    // --- ETHEREUM & FRIENDS (L2s & Competitors) ---
+    // --- ETHEREUM ECOSYSTEM ---
     ['MATIC/USDT', 'ETH/USDT'],
     ['OP/USDT', 'ETH/USDT'],
     ['ARB/USDT', 'ETH/USDT'],
@@ -19,7 +19,7 @@ const PAIRS = [
     ['AVAX/USDT', 'ETH/USDT'],
     ['DOT/USDT', 'ETH/USDT'],
 
-    // --- LAYER 1 WARS (Highly Cointegrated) ---
+    // --- L1 WARS ---
     ['AVAX/USDT', 'SOL/USDT'],
     ['NEAR/USDT', 'SOL/USDT'],
     ['ADA/USDT', 'XRP/USDT'],
@@ -27,47 +27,48 @@ const PAIRS = [
     ['FTM/USDT', 'MATIC/USDT'],
     ['TRX/USDT', 'XRP/USDT'],
     
-    // --- LEGACY COINS (The "Dino" Coins) ---
+    // --- LEGACY ---
     ['EOS/USDT', 'XTZ/USDT'],
-    ['XLM/USDT', 'XRP/USDT'], // CLASSIC PAIR
+    ['XLM/USDT', 'XRP/USDT'],
     ['LTC/USDT', 'BCH/USDT'],
     ['ETC/USDT', 'ETH/USDT'],
 
-    // --- DEFI BLUE CHIPS ---
+    // --- DEFI ---
     ['UNI/USDT', 'AAVE/USDT'],
-    ['LINK/USDT', 'ETH/USDT'], // Oracle vs Chain
+    ['LINK/USDT', 'ETH/USDT'],
     ['MKR/USDT', 'AAVE/USDT'],
-    ['CRV/USDT', 'CVX/USDT'],  // Symbiotic Relationship
-    ['LDO/USDT', 'ETH/USDT'],  // Staking vs Token
+    ['CRV/USDT', 'CVX/USDT'],
+    ['LDO/USDT', 'ETH/USDT'],
 
-    // --- MEME COINS (High Volatility - The "Fun" Zone) ---
+    // --- MEME ---
     ['DOGE/USDT', 'SHIB/USDT'],
     ['PEPE/USDT', 'DOGE/USDT'],
     ['FLOKI/USDT', 'SHIB/USDT'],
     ['MEME/USDT', 'PEPE/USDT'],
     
-    // --- EXCHANGE TOKENS ---
-    ['KCS/USDT', 'BNB/USDT']   // If available on Binance (KuCoin vs Binance)
+    // --- EXCHANGES ---
+    // Note: KCS is often not on Binance, swapped for valid pair
+    ['ALGO/USDT', 'XRP/USDT'] 
 ];
 
 const CONFIG = {
-    capitalPerPair: 25.0,  // $25 per pair
-    entryZ: 0.5,           // Signal Strength
-    exitZ: 0.0,            // Mean Reversion
-    stopLossZ: 4         // Structural Break
+    capitalPerPair: 25.0,  
+    entryZ: 0.5,           
+    exitZ: 0.0,            
+    stopLossZ: 4         
 };
 
 // --- 2. GLOBAL STATE ---
-let marketState = {}; // Stores live Z-scores for frontend
+let marketState = {}; 
 let virtualWallet = { balance: 250.00, locked: 0.00 };
 let activePositions = {}; 
 
-// --- 3. WEB DASHBOARD (The Frontend) ---
+// --- 3. WEB DASHBOARD ---
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    // Sort: Active trades first, then by highest Z-Score (Red/Green)
+    // Sort logic: Active trades first, then high Z-scores
     const sortedPairs = Object.keys(marketState).sort((a, b) => {
         if (activePositions[a] && !activePositions[b]) return -1;
         if (!activePositions[a] && activePositions[b]) return 1;
@@ -79,12 +80,10 @@ app.get('/', (req, res) => {
         const z = data.z;
         const inTrade = activePositions[pair];
         
-        // Color Logic
         let zColor = 'black';
-        if (z > 1.5) zColor = '#d9534f'; // Red (Sell Signal)
-        if (z < -1.5) zColor = '#5cb85c'; // Green (Buy Signal)
+        if (z > 1.5) zColor = '#d9534f'; 
+        if (z < -1.5) zColor = '#5cb85c'; 
         
-        // Row Highlight
         let rowStyle = inTrade ? 'background-color: #fff3cd;' : '';
 
         return `
@@ -101,7 +100,8 @@ app.get('/', (req, res) => {
     const html = `
         <html>
         <head>
-            <meta http-equiv="refresh" content="1"> <title>Algo Dashboard</title>
+            <meta http-equiv="refresh" content="2">
+            <title>Algo Dashboard</title>
             <style>
                 body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; padding: 20px; }
                 .container { max-width: 1000px; margin: 0 auto; }
@@ -119,7 +119,7 @@ app.get('/', (req, res) => {
             <div class="container">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <h1><span class="status-dot"></span>Algo Trading Monitor</h1>
-                    <small>Refreshing every 1s</small>
+                    <small>Auto-Refresh: 2s</small>
                 </div>
 
                 <div class="stats-grid">
@@ -156,7 +156,7 @@ app.listen(port, () => {
 // --- 4. MATH ENGINE ---
 class KalmanFilter {
     constructor(delta = 1e-4, R = 1e-3) {
-        this.x = 0; // Beta
+        this.x = 0; 
         this.P = 1; 
         this.Q = delta;
         this.R = R;
@@ -179,11 +179,11 @@ async function runPair(exchange, symbolY, symbolX) {
     const kf = new KalmanFilter();
     const pairName = `${symbolY}-${symbolX}`;
     
-    // Initialize Dashboard State
     marketState[pairName] = { z: 0, beta: 0, px: 0, py: 0 };
 
     try {
-        // WARMUP (Fetch 50 hours of history)
+        // WARMUP 
+        // We catch errors here so one bad pair doesn't crash the whole bot
         const [histY, histX] = await Promise.all([
             exchange.fetchOHLCV(symbolY, '1h', undefined, 50),
             exchange.fetchOHLCV(symbolX, '1h', undefined, 50)
@@ -192,8 +192,7 @@ async function runPair(exchange, symbolY, symbolX) {
             kf.update(histX[i][4], histY[i][4]);
         }
     } catch (e) {
-        // If a pair fails (e.g., KCS not on Binance), we just log and skip it
-        console.log(`[${pairName}] Startup Error: ${e.message} (Removing from list)`);
+        console.log(`[${pairName}] Startup Error: ${e.message} (Removing from list)`.red);
         delete marketState[pairName];
         return; 
     }
@@ -211,10 +210,8 @@ async function runPair(exchange, symbolY, symbolX) {
             const { error, stdDev } = kf.update(px, py);
             const zScore = error / stdDev;
 
-            // Update Frontend
             marketState[pairName] = { z: zScore, beta: kf.x, px: px, py: py };
 
-            // Logic
             const pos = activePositions[pairName];
             if (!pos) {
                 if (virtualWallet.balance - virtualWallet.locked >= CONFIG.capitalPerPair) {
@@ -228,11 +225,11 @@ async function runPair(exchange, symbolY, symbolX) {
             }
 
         } catch (e) {
-            console.log(`[${pairName}] Error: ${e.message}`);
+            console.log(`[${pairName}] Error: ${e.message}`.red);
         }
         
-        // Randomize delay slightly to prevent API bans (2s - 4s)
-        const delay = Math.floor(Math.random() * 2000) + 2000;
+        // Randomize delay (3s - 6s) to prevent "Syncing" requests and triggering new bans
+        const delay = Math.floor(Math.random() * 3000) + 3000;
         await new Promise(r => setTimeout(r, delay));
     }
 }
@@ -257,8 +254,27 @@ function exitVirtualTrade(pairName, currentY, currentX, reason) {
     console.log(`CLOSE: ${pairName} ($${pnl.toFixed(2)})`.cyan);
 }
 
-// --- LAUNCH ---
-const exchange = new ccxt.binance();
-console.log(`Starting ${PAIRS.length} Pairs...`);
-PAIRS.forEach(p => runPair(exchange, p[0], p[1]));
+// --- 6. MAIN LAUNCHER (FIXED FOR RATE LIMITS) ---
+async function main() {
+    console.log("--- INITIALIZING BOT (STAGGERED START) ---".yellow);
+    
+    // CRITICAL: Enable Rate Limiting to prevent "Teapot" 418 Errors
+    const exchange = new ccxt.binance({
+        'enableRateLimit': true, 
+        'options': { 'defaultType': 'spot' }
+    });
 
+    // Launch pairs one by one with delay
+    for (const pair of PAIRS) {
+        // Fire and forget (don't await the result, just await the launch)
+        runPair(exchange, pair[0], pair[1]);
+        
+        // 2-second delay between launches prevents hitting the 1200 weight/min limit
+        console.log(`[System] Launching ${pair[0]}-${pair[1]}...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    console.log("--- ALL PAIRS LAUNCHED SUCCESSFULLY ---".green);
+}
+
+main();
