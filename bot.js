@@ -52,7 +52,7 @@ const PAIRS = [
 ];
 
 const CONFIG = {
-    capitalPerPair: 25.0,  
+    capitalPerPair: 125.00,  
     entryZ: 0.5,           
     exitZ: 0.0,            
     stopLossZ: 4         
