@@ -2,58 +2,162 @@ const express = require('express');
 const ccxt = require('ccxt');
 const colors = require('colors');
 
-// --- 1. HEARTBEAT SERVER (For Render Hosting) ---
-// This tricks the cloud server into thinking this is a website so it stays awake.
+// --- 1. CONFIGURATION ---
+// EXPANDED LIST: 30 Correlated Pairs (Sector-Based)
+const PAIRS = [
+    // --- THE KINGS (High Correlation, Low Volatility) ---
+    ['ETH/USDT', 'BTC/USDT'],
+    ['BNB/USDT', 'BTC/USDT'],
+    ['LTC/USDT', 'BTC/USDT'],
+    ['BCH/USDT', 'BTC/USDT'],
+    
+    // --- ETHEREUM & FRIENDS (L2s & Competitors) ---
+    ['MATIC/USDT', 'ETH/USDT'],
+    ['OP/USDT', 'ETH/USDT'],
+    ['ARB/USDT', 'ETH/USDT'],
+    ['SOL/USDT', 'ETH/USDT'],
+    ['AVAX/USDT', 'ETH/USDT'],
+    ['DOT/USDT', 'ETH/USDT'],
+
+    // --- LAYER 1 WARS (Highly Cointegrated) ---
+    ['AVAX/USDT', 'SOL/USDT'],
+    ['NEAR/USDT', 'SOL/USDT'],
+    ['ADA/USDT', 'XRP/USDT'],
+    ['ATOM/USDT', 'DOT/USDT'],
+    ['FTM/USDT', 'MATIC/USDT'],
+    ['TRX/USDT', 'XRP/USDT'],
+    
+    // --- LEGACY COINS (The "Dino" Coins) ---
+    ['EOS/USDT', 'XTZ/USDT'],
+    ['XLM/USDT', 'XRP/USDT'], // CLASSIC PAIR
+    ['LTC/USDT', 'BCH/USDT'],
+    ['ETC/USDT', 'ETH/USDT'],
+
+    // --- DEFI BLUE CHIPS ---
+    ['UNI/USDT', 'AAVE/USDT'],
+    ['LINK/USDT', 'ETH/USDT'], // Oracle vs Chain
+    ['MKR/USDT', 'AAVE/USDT'],
+    ['CRV/USDT', 'CVX/USDT'],  // Symbiotic Relationship
+    ['LDO/USDT', 'ETH/USDT'],  // Staking vs Token
+
+    // --- MEME COINS (High Volatility - The "Fun" Zone) ---
+    ['DOGE/USDT', 'SHIB/USDT'],
+    ['PEPE/USDT', 'DOGE/USDT'],
+    ['FLOKI/USDT', 'SHIB/USDT'],
+    ['MEME/USDT', 'PEPE/USDT'],
+    
+    // --- EXCHANGE TOKENS ---
+    ['KCS/USDT', 'BNB/USDT']   // If available on Binance (KuCoin vs Binance)
+];
+
+const CONFIG = {
+    capitalPerPair: 25.0,  // $25 per pair
+    entryZ: 2.0,           // Signal Strength
+    exitZ: 0.0,            // Mean Reversion
+    stopLossZ: 4.5         // Structural Break
+};
+
+// --- 2. GLOBAL STATE ---
+let marketState = {}; // Stores live Z-scores for frontend
+let virtualWallet = { balance: 250.00, locked: 0.00 };
+let activePositions = {}; 
+
+// --- 3. WEB DASHBOARD (The Frontend) ---
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    res.send(`
-        <h1>Trading Bot Active 🟢</h1>
-        <p>Portfolio Balance: $${virtualWallet.balance.toFixed(2)}</p>
-        <p>Active Positions: ${Object.keys(activePositions).length}</p>
-    `);
+    // Sort: Active trades first, then by highest Z-Score (Red/Green)
+    const sortedPairs = Object.keys(marketState).sort((a, b) => {
+        if (activePositions[a] && !activePositions[b]) return -1;
+        if (!activePositions[a] && activePositions[b]) return 1;
+        return Math.abs(marketState[b].z) - Math.abs(marketState[a].z);
+    });
+
+    let tableRows = sortedPairs.map(pair => {
+        const data = marketState[pair];
+        const z = data.z;
+        const inTrade = activePositions[pair];
+        
+        // Color Logic
+        let zColor = 'black';
+        if (z > 1.5) zColor = '#d9534f'; // Red (Sell Signal)
+        if (z < -1.5) zColor = '#5cb85c'; // Green (Buy Signal)
+        
+        // Row Highlight
+        let rowStyle = inTrade ? 'background-color: #fff3cd;' : '';
+
+        return `
+            <tr style="${rowStyle}">
+                <td><strong>${pair}</strong></td>
+                <td style="color:${zColor}; font-weight:bold; font-size: 1.1em;">${z.toFixed(4)}</td>
+                <td>${data.beta.toFixed(4)}</td>
+                <td>$${data.px.toFixed(4)} / $${data.py.toFixed(4)}</td>
+                <td>${inTrade ? '⚡ ACTIVE' : 'WAITING'}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const html = `
+        <html>
+        <head>
+            <meta http-equiv="refresh" content="1"> <title>Algo Dashboard</title>
+            <style>
+                body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; padding: 20px; }
+                .container { max-width: 1000px; margin: 0 auto; }
+                .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+                .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+                .card h3 { margin: 0; color: #666; font-size: 0.9em; }
+                .card div { font-size: 1.5em; font-weight: bold; margin-top: 5px; color: #333; }
+                table { width: 100%; background: white; border-collapse: collapse; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                th { background: #343a40; color: white; padding: 15px; text-align: left; }
+                td { padding: 12px 15px; border-bottom: 1px solid #eee; }
+                .status-dot { height: 10px; width: 10px; background-color: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h1><span class="status-dot"></span>Algo Trading Monitor</h1>
+                    <small>Refreshing every 1s</small>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="card"><h3>Virtual Balance</h3><div style="color:#28a745">$${virtualWallet.balance.toFixed(2)}</div></div>
+                    <div class="card"><h3>Locked Capital</h3><div style="color:#dc3545">$${virtualWallet.locked.toFixed(2)}</div></div>
+                    <div class="card"><h3>Active Pairs</h3><div>${Object.keys(marketState).length} / ${PAIRS.length}</div></div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pair (Y / X)</th>
+                            <th>Live Z-Score</th>
+                            <th>Beta Ratio</th>
+                            <th>Prices (X / Y)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+        </body>
+        </html>
+    `;
+    res.send(html);
 });
 
 app.listen(port, () => {
-    console.log(`Heartbeat Server running on port ${port}`);
+    console.log(`Web Dashboard running on port ${port}`);
 });
 
-// --- 2. CONFIGURATION ---
-const PAIRS = [
-    ['ETH/USDT', 'BTC/USDT'],   // 1. The King & Queen
-    ['BNB/USDT', 'BTC/USDT'],   // 2. Exchange vs Market
-    ['SOL/USDT', 'ETH/USDT'],   // 3. L1 Competitors
-    ['AVAX/USDT', 'SOL/USDT'],  // 4. High Speed L1s
-    ['MATIC/USDT', 'ETH/USDT'], // 5. L2 vs L1
-    ['ADA/USDT', 'XRP/USDT'],   // 6. Legacy Alts
-    ['DOGE/USDT', 'SHIB/USDT'], // 7. Meme Coins
-    ['LTC/USDT', 'BCH/USDT'],   // 8. Old School POW
-    ['ATOM/USDT', 'DOT/USDT'],  // 9. Interoperability
-    ['LINK/USDT', 'ETH/USDT']   // 10. Oracle vs Chain
-];
-
-const CONFIG = {
-    capitalPerPair: 25.0,  // Allocate $25 per pair
-    entryZ: 2.0,           // Enter trade at 2.0 Std Dev
-    exitZ: 0.0,            // Exit trade at Mean (0.0)
-    stopLossZ: 4.0         // Emergency exit
-};
-
-// --- 3. VIRTUAL PORTFOLIO STATE ---
-let virtualWallet = {
-    balance: 250.00,       // Starting Capital
-    locked: 0.00           // Capital currently in trades
-};
-
-// Tracks active trades: { 'ETH/BTC': { type: 'SHORT_SPREAD', entryPrices: ... } }
-let activePositions = {}; 
-
-// --- 4. MATH ENGINE (KALMAN FILTER) ---
+// --- 4. MATH ENGINE ---
 class KalmanFilter {
     constructor(delta = 1e-4, R = 1e-3) {
-        this.x = 0; // Slope (Beta)
-        this.P = 1; // Covariance
+        this.x = 0; // Beta
+        this.P = 1; 
         this.Q = delta;
         this.R = R;
     }
@@ -73,30 +177,30 @@ class KalmanFilter {
 // --- 5. EXECUTION ENGINE ---
 async function runPair(exchange, symbolY, symbolX) {
     const kf = new KalmanFilter();
-    const pairName = `${symbolY}-${symbolX}`; // e.g. "ETH/USDT-BTC/USDT"
-    const logPrefix = `[${symbolY.split('/')[0]}/${symbolX.split('/')[0]}]`.cyan;
+    const pairName = `${symbolY}-${symbolX}`;
     
-    // Warmup: Fetch history to train the filter instantly
+    // Initialize Dashboard State
+    marketState[pairName] = { z: 0, beta: 0, px: 0, py: 0 };
+
     try {
-        console.log(`${logPrefix} Fetching history to warm up math model...`.gray);
+        // WARMUP (Fetch 50 hours of history)
         const [histY, histX] = await Promise.all([
             exchange.fetchOHLCV(symbolY, '1h', undefined, 50),
             exchange.fetchOHLCV(symbolX, '1h', undefined, 50)
         ]);
-        
-        // Train filter on past 50 hours
         for (let i = 0; i < Math.min(histY.length, histX.length); i++) {
-            kf.update(histX[i][4], histY[i][4]); // Close price is index 4
+            kf.update(histX[i][4], histY[i][4]);
         }
-        console.log(`${logPrefix} Ready. Beta: ${kf.x.toFixed(4)}`.green);
     } catch (e) {
-        console.log(`${logPrefix} Warmup Failed: ${e.message}`.red);
+        // If a pair fails (e.g., KCS not on Binance), we just log and skip it
+        console.log(`[${pairName}] Startup Error: ${e.message} (Removing from list)`);
+        delete marketState[pairName];
+        return; 
     }
 
-    // Infinite Real-Time Loop
+    // REAL-TIME LOOP
     while (true) {
         try {
-            // 1. Fetch Live Prices Parallelly
             const [tickerY, tickerX] = await Promise.all([
                 exchange.fetchTicker(symbolY),
                 exchange.fetchTicker(symbolX)
@@ -104,121 +208,56 @@ async function runPair(exchange, symbolY, symbolX) {
             const py = tickerY.last;
             const px = tickerX.last;
 
-            // 2. Math Update
             const { error, stdDev } = kf.update(px, py);
             const zScore = error / stdDev;
 
-            // 3. Logic & Virtual Execution
-            const pos = activePositions[pairName];
-            
-            // LOGIC A: NO POSITION -> CHECK ENTRY
-            if (!pos) {
-                // Check if we have funds ($25 free)
-                if (virtualWallet.balance - virtualWallet.locked >= CONFIG.capitalPerPair) {
-                    
-                    if (zScore > CONFIG.entryZ) {
-                        // SELL Y / BUY X
-                        enterVirtualTrade(pairName, 'SHORT_SPREAD', py, px);
-                    } else if (zScore < -CONFIG.entryZ) {
-                        // BUY Y / SELL X
-                        enterVirtualTrade(pairName, 'LONG_SPREAD', py, px);
-                    }
-                }
-            } 
-            // LOGIC B: IN POSITION -> CHECK EXIT
-            else {
-                // Stop Loss
-                if (Math.abs(zScore) > CONFIG.stopLossZ) {
-                    exitVirtualTrade(pairName, py, px, "STOP LOSS");
-                }
-                // Take Profit (Mean Reversion)
-                else if (pos.type === 'SHORT_SPREAD' && zScore <= CONFIG.exitZ) {
-                    exitVirtualTrade(pairName, py, px, "PROFIT");
-                } 
-                else if (pos.type === 'LONG_SPREAD' && zScore >= -CONFIG.exitZ) {
-                    exitVirtualTrade(pairName, py, px, "PROFIT");
-                }
-            }
+            // Update Frontend
+            marketState[pairName] = { z: zScore, beta: kf.x, px: px, py: py };
 
-            // Periodic Log (Only log significant Z-scores to keep console clean)
-            if (Math.abs(zScore) > 1.5 || pos) {
-                 console.log(`${logPrefix} Z: ${zScore.toFixed(2)} | Beta: ${kf.x.toFixed(3)} | $${virtualWallet.balance.toFixed(2)}`);
+            // Logic
+            const pos = activePositions[pairName];
+            if (!pos) {
+                if (virtualWallet.balance - virtualWallet.locked >= CONFIG.capitalPerPair) {
+                    if (zScore > CONFIG.entryZ) enterVirtualTrade(pairName, 'SHORT_SPREAD', py, px);
+                    else if (zScore < -CONFIG.entryZ) enterVirtualTrade(pairName, 'LONG_SPREAD', py, px);
+                }
+            } else {
+                if (Math.abs(zScore) > CONFIG.stopLossZ) exitVirtualTrade(pairName, py, px, "STOP LOSS");
+                else if (pos.type === 'SHORT_SPREAD' && zScore <= CONFIG.exitZ) exitVirtualTrade(pairName, py, px, "PROFIT");
+                else if (pos.type === 'LONG_SPREAD' && zScore >= -CONFIG.exitZ) exitVirtualTrade(pairName, py, px, "PROFIT");
             }
 
         } catch (e) {
-            console.log(`${logPrefix} Error: ${e.message}`.red);
+            console.log(`[${pairName}] Error: ${e.message}`);
         }
-
-        // Wait 10 seconds before next tick
-        await new Promise(r => setTimeout(r, 10000));
+        
+        // Randomize delay slightly to prevent API bans (2s - 4s)
+        const delay = Math.floor(Math.random() * 2000) + 2000;
+        await new Promise(r => setTimeout(r, delay));
     }
 }
 
-// --- HELPER: VIRTUAL TRADE LOGIC ---
+// --- HELPERS ---
 function enterVirtualTrade(pairName, type, py, px) {
-    const size = CONFIG.capitalPerPair / 2; // $12.50 per leg
-    
-    // Store trade details
-    activePositions[pairName] = {
-        type: type,
-        entryY: py,
-        entryX: px,
-        qtyY: size / py,
-        qtyX: size / px,
-        startTime: new Date()
-    };
-    
+    const size = CONFIG.capitalPerPair / 2;
+    activePositions[pairName] = { type, entryY: py, entryX: px, qtyY: size/py, qtyX: size/px };
     virtualWallet.locked += CONFIG.capitalPerPair;
-    
-    console.log(`\n>>> OPEN TRADE [${pairName}] <<<`.yellow.bold);
-    console.log(`    Type: ${type}`);
-    console.log(`    Price Y: ${py} | Price X: ${px}`);
-    console.log(`    Allocated: $${CONFIG.capitalPerPair}\n`);
+    console.log(`OPEN: ${pairName}`.green);
 }
 
 function exitVirtualTrade(pairName, currentY, currentX, reason) {
     const pos = activePositions[pairName];
-    
-    // Calculate PnL
-    // Long PnL = (Exit - Entry) * Qty
-    // Short PnL = (Entry - Exit) * Qty
-    let pnlY = 0, pnlX = 0;
+    let pnl = 0;
+    if (pos.type === 'SHORT_SPREAD') pnl = (pos.entryY - currentY)*pos.qtyY + (currentX - pos.entryX)*pos.qtyX;
+    else pnl = (currentY - pos.entryY)*pos.qtyY + (pos.entryX - currentX)*pos.qtyX;
 
-    if (pos.type === 'SHORT_SPREAD') {
-        // We Shorted Y (Entry - Exit) and Longed X (Exit - Entry)
-        pnlY = (pos.entryY - currentY) * pos.qtyY;
-        pnlX = (currentX - pos.entryX) * pos.qtyX;
-    } else {
-        // We Longed Y (Exit - Entry) and Shorted X (Entry - Exit)
-        pnlY = (currentY - pos.entryY) * pos.qtyY;
-        pnlX = (pos.entryX - currentX) * pos.qtyX;
-    }
-
-    const totalPnL = pnlY + pnlX;
-    
-    // Update Wallet
     virtualWallet.locked -= CONFIG.capitalPerPair;
-    virtualWallet.balance += totalPnL;
-    
+    virtualWallet.balance += pnl;
     delete activePositions[pairName];
-
-    const color = totalPnL > 0 ? 'green' : 'red';
-    console.log(`\n<<< CLOSE TRADE [${pairName}] (${reason}) >>>`[color].bold);
-    console.log(`    PnL: $${totalPnL.toFixed(4)}`);
-    console.log(`    New Balance: $${virtualWallet.balance.toFixed(2)}\n`);
+    console.log(`CLOSE: ${pairName} ($${pnl.toFixed(2)})`.cyan);
 }
 
-// --- MAIN LAUNCHER ---
-async function main() {
-    console.log("--- VIRTUAL TRADING BOT INITIALIZED ---".rainbow);
-    console.log(`Pairs: ${PAIRS.length} | Capital: $${virtualWallet.balance}`);
-    
-    const exchange = new ccxt.binance();
-
-    // Start all 10 pairs
-    PAIRS.forEach(pair => {
-        runPair(exchange, pair[0], pair[1]);
-    });
-}
-
-main();
+// --- LAUNCH ---
+const exchange = new ccxt.binance();
+console.log(`Starting ${PAIRS.length} Pairs...`);
+PAIRS.forEach(p => runPair(exchange, p[0], p[1]));
