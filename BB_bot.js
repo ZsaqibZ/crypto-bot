@@ -34,7 +34,7 @@ const PAIRS = [
 ];
 
 const STRATEGY = {
-    timeframe: '5m',
+    timeframe: '15m',
     period: 20,          // SMA 20
     stdDev: 2.0,         // Width 2.0
     shift: 10,           // Shift 10
@@ -45,8 +45,8 @@ const STRATEGY = {
     // Position Size = Margin * Leverage = $25.00
     
     useTrendFilter: true,
-    takeProfitPct: 0.05, // 5% Move
-    stopLossPct: 0.025   // 2.5% Move
+    takeProfitPct: 0.02, // 2% Move
+    stopLossPct: 0.01   // 1% Move
 };
 
 // --- 2. STATE ---
