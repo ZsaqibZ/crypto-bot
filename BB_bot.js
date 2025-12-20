@@ -41,11 +41,13 @@ const PAIRS = [
 
 const STRATEGY = {
     timeframe: '5m',     // 5-minute candles
-    period: 20,          // SMA 20 (Back to Previous Settings)
+    period: 20,          // SMA 20
     stdDev: 2.0,         // Width 2.0
-    shift: 10,           // Shift 10 (Displacement)
+    shift: 10,           // Shift 10
     capital: 25.0,       // Position size ($)
-    useTrendFilter: true // EMA 50 Trend Filter
+    useTrendFilter: true,// EMA 50 Filter
+    takeProfitPct: 0.05, // 5% Target
+    stopLossPct: 0.025   // 2.5% Stop
 };
 
 // --- 2. STATE ---
@@ -59,10 +61,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    // SORTING LOGIC: 
-    // 1. Active Trades
-    // 2. Near Breakout (Testing Upper/Lower)
-    // 3. Alphabetical
+    // Sort logic
     const sortedPairs = Object.keys(marketState).sort((a, b) => {
         if (activePositions[a] && !activePositions[b]) return -1;
         if (!activePositions[a] && activePositions[b]) return 1;
@@ -134,7 +133,7 @@ app.get('/', (req, res) => {
             </style>
         </head>
         <body>
-            <h2>🚀 Centurion Bot (100 Pairs | SMA 20 | Shift 10)</h2>
+            <h2>🚀 Centurion Bot (Risk: 5% TP | 2.5% SL)</h2>
             <div class="stats">
                 <div class="card"><div>Balance</div><div class="num" style="color:#27ae60">$${virtualWallet.balance.toFixed(2)}</div></div>
                 <div class="card"><div>Locked</div><div class="num" style="color:#c0392b">$${virtualWallet.locked.toFixed(2)}</div></div>
@@ -192,7 +191,6 @@ async function runPair(exchange, symbol) {
 
     while (true) {
         try {
-            // Fetch ~100 candles to cover EMA50 + Shift10 + SMA20
             const candles = await exchange.fetchOHLCV(symbol, STRATEGY.timeframe, undefined, 100);
             if (candles.length < 80) throw new Error("Not enough data");
 
@@ -207,8 +205,6 @@ async function runPair(exchange, symbol) {
 
             // --- 1. SHIFTED DATA SLICE ---
             const shiftedIndex = signalIndex - STRATEGY.shift;
-            
-            // Get slice for SMA 20 (Previous settings)
             const smaSlice = candles.slice(shiftedIndex - STRATEGY.period + 1, shiftedIndex + 1).map(c => c[4]);
             
             // --- 2. CALCULATE INDICATORS ---
@@ -218,7 +214,7 @@ async function runPair(exchange, symbol) {
             const upper = sma + (STRATEGY.stdDev * std);
             const lower = sma - (STRATEGY.stdDev * std);
 
-            // --- 3. TREND FILTER (EMA 50 Current) ---
+            // --- 3. TREND FILTER ---
             const emaSlice = candles.slice(0, signalIndex + 1).map(c => c[4]);
             const trendEMA = calculateEMA(emaSlice, 50);
 
@@ -235,11 +231,11 @@ async function runPair(exchange, symbol) {
             if (timestamp > lastProcessedCandle[symbol]) {
                 if (!pos && virtualWallet.balance - virtualWallet.locked >= STRATEGY.capital) {
                     
-                    // LONG: Rejection Lower + Price > Trend EMA
+                    // LONG ENTRY
                     if (lowPrice < lower && closePrice > lower && closePrice > trendEMA) {
                         enterTrade(symbol, 'LONG', closePrice);
                     }
-                    // SHORT: Rejection Upper + Price < Trend EMA
+                    // SHORT ENTRY
                     else if (highPrice > upper && closePrice < upper && closePrice < trendEMA) {
                         enterTrade(symbol, 'SHORT', closePrice);
                     }
@@ -247,23 +243,31 @@ async function runPair(exchange, symbol) {
                 lastProcessedCandle[symbol] = timestamp;
             }
 
-            // --- 5. EXIT LOGIC ---
+            // --- 5. FIXED EXIT LOGIC (5% TP / 2.5% SL) ---
             if (pos) {
                 if (pos.type === 'LONG') {
-                    if (highPrice >= sma) closeTrade(symbol, sma, 'TARGET');
-                    else if (closePrice < lower * 0.99) closeTrade(symbol, closePrice, 'STOP'); 
-                } else {
-                    if (lowPrice <= sma) closeTrade(symbol, sma, 'TARGET');
-                    else if (closePrice > upper * 1.01) closeTrade(symbol, closePrice, 'STOP');
+                    // Targets
+                    const takeProfit = pos.entryPrice * (1 + STRATEGY.takeProfitPct);
+                    const stopLoss = pos.entryPrice * (1 - STRATEGY.stopLossPct);
+
+                    if (highPrice >= takeProfit) closeTrade(symbol, takeProfit, 'TAKE PROFIT (5%)');
+                    else if (lowPrice <= stopLoss) closeTrade(symbol, stopLoss, 'STOP LOSS (2.5%)'); 
+                } 
+                else if (pos.type === 'SHORT') {
+                    // Targets
+                    const takeProfit = pos.entryPrice * (1 - STRATEGY.takeProfitPct);
+                    const stopLoss = pos.entryPrice * (1 + STRATEGY.stopLossPct);
+
+                    if (lowPrice <= takeProfit) closeTrade(symbol, takeProfit, 'TAKE PROFIT (5%)');
+                    else if (highPrice >= stopLoss) closeTrade(symbol, stopLoss, 'STOP LOSS (2.5%)');
                 }
             }
 
         } catch (e) {
-            // Silent error to keep console clean with 100 pairs
-            // console.log(`[${symbol}] Error: ${e.message}`);
+            // Ignore errors for smoothness
         }
 
-        // SLOW LOOP: 5-10 seconds delay to prevent rate limits with 100 pairs
+        // Delay 5-10s
         const delay = Math.floor(Math.random() * 5000) + 5000;
         await new Promise(r => setTimeout(r, delay));
     }
@@ -279,8 +283,12 @@ function enterTrade(symbol, type, price) {
 function closeTrade(symbol, price, reason) {
     const pos = activePositions[symbol];
     let pnl = 0;
-    if (pos.type === 'LONG') pnl = (price - pos.entryPrice) * (STRATEGY.capital / pos.entryPrice);
-    else pnl = (pos.entryPrice - price) * (STRATEGY.capital / pos.entryPrice);
+    
+    if (pos.type === 'LONG') {
+        pnl = (price - pos.entryPrice) * (STRATEGY.capital / pos.entryPrice);
+    } else {
+        pnl = (pos.entryPrice - price) * (STRATEGY.capital / pos.entryPrice);
+    }
     
     virtualWallet.locked -= STRATEGY.capital;
     virtualWallet.balance += pnl;
@@ -292,14 +300,12 @@ function closeTrade(symbol, price, reason) {
 
 // --- MAIN ---
 async function main() {
-    console.log("--- LAUNCHING 100-PAIR CENTURION BOT ---".yellow);
-    
+    console.log("--- LAUNCHING CENTURION BOT (FIXED RISK) ---".yellow);
     const exchange = new ccxt.binance({
         'enableRateLimit': true,
-        'options': { 'defaultType': 'future' } // Futures Market
+        'options': { 'defaultType': 'future' }
     });
 
-    // Launch all 100 pairs with 0.5s staggered start (50s total startup)
     for (const pair of PAIRS) {
         runPair(exchange, pair[0]);
         await new Promise(r => setTimeout(r, 500));
