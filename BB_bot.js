@@ -2,63 +2,79 @@ const express = require('express');
 const ccxt = require('ccxt');
 const colors = require('colors');
 
-// --- 1. CONFIGURATION: THE "CENTURION" LIST (100+ PAIRS) ---
+// --- 1. CONFIGURATION: THE "CENTURION" LIST ---
 const PAIRS = [
-    // --- TIER 1: THE KINGS ---
+    // TIER 1: MAJORS
     ['BTC/USDT', 'USDT'], ['ETH/USDT', 'USDT'], ['BNB/USDT', 'USDT'], ['SOL/USDT', 'USDT'], ['XRP/USDT', 'USDT'],
     ['ADA/USDT', 'USDT'], ['DOGE/USDT', 'USDT'], ['AVAX/USDT', 'USDT'], ['TRX/USDT', 'USDT'], ['DOT/USDT', 'USDT'],
     ['MATIC/USDT', 'USDT'], ['LTC/USDT', 'USDT'], ['BCH/USDT', 'USDT'], ['LINK/USDT', 'USDT'], ['XLM/USDT', 'USDT'],
-    ['ATOM/USDT', 'USDT'], ['UNI/USDT', 'USDT'], ['ETC/USDT', 'USDT'], ['FIL/USDT', 'USDT'], ['NEAR/USDT', 'USDT'],
     
-    // --- TIER 2: HIGH VOLUME ALTS ---
+    // TIER 2: HIGH VOLATILITY
+    ['SHIB/USDT', 'USDT'], ['PEPE/USDT', 'USDT'], ['FLOKI/USDT', 'USDT'], ['BONK/USDT', 'USDT'], ['WIF/USDT', 'USDT'],
     ['APT/USDT', 'USDT'], ['ARB/USDT', 'USDT'], ['OP/USDT', 'USDT'], ['RNDR/USDT', 'USDT'], ['INJ/USDT', 'USDT'],
     ['STX/USDT', 'USDT'], ['IMX/USDT', 'USDT'], ['GRT/USDT', 'USDT'], ['LDO/USDT', 'USDT'], ['QNT/USDT', 'USDT'],
-    ['VET/USDT', 'USDT'], ['MKR/USDT', 'USDT'], ['AAVE/USDT', 'USDT'], ['SNX/USDT', 'USDT'], ['ALGO/USDT', 'USDT'],
-    ['AXS/USDT', 'USDT'], ['SAND/USDT', 'USDT'], ['MANA/USDT', 'USDT'], ['EOS/USDT', 'USDT'], ['THETA/USDT', 'USDT'],
     
-    // --- TIER 3: MEME & SPECULATIVE ---
-    ['SHIB/USDT', 'USDT'], ['PEPE/USDT', 'USDT'], ['FLOKI/USDT', 'USDT'], ['BONK/USDT', 'USDT'], ['WIF/USDT', 'USDT'],
-    ['MEME/USDT', 'USDT'], ['ORDI/USDT', 'USDT'], ['SATS/USDT', 'USDT'], ['BOME/USDT', 'USDT'], ['DOGS/USDT', 'USDT'],
-    
-    // --- TIER 4: AI & GAMING ---
-    ['FET/USDT', 'USDT'], ['AGIX/USDT', 'USDT'], ['OCEAN/USDT', 'USDT'], ['GALA/USDT', 'USDT'], ['APE/USDT', 'USDT'],
-    ['ILV/USDT', 'USDT'], ['GMT/USDT', 'USDT'], ['ENJ/USDT', 'USDT'], ['MAGIC/USDT', 'USDT'], ['PIXEL/USDT', 'USDT'],
-    
-    // --- TIER 5: DEFI & INFRA ---
+    // TIER 3: DEFI & ALTS
     ['CRV/USDT', 'USDT'], ['CVX/USDT', 'USDT'], ['COMP/USDT', 'USDT'], ['DYDX/USDT', 'USDT'], ['GMX/USDT', 'USDT'],
     ['JUP/USDT', 'USDT'], ['PYTH/USDT', 'USDT'], ['TIA/USDT', 'USDT'], ['SEI/USDT', 'USDT'], ['SUI/USDT', 'USDT'],
-    ['BLUR/USDT', 'USDT'], ['ENS/USDT', 'USDT'], ['MINA/USDT', 'USDT'], ['FLOW/USDT', 'USDT'], ['CHZ/USDT', 'USDT'],
+    ['FET/USDT', 'USDT'], ['AGIX/USDT', 'USDT'], ['OCEAN/USDT', 'USDT'], ['GALA/USDT', 'USDT'], ['APE/USDT', 'USDT'],
+    ['RUNE/USDT', 'USDT'], ['EGLD/USDT', 'USDT'], ['FXS/USDT', 'USDT'], ['KLAY/USDT', 'USDT'], ['1INCH/USDT', 'USDT'],
     
-    // --- TIER 6: LEGACY & POW ---
+    // FILLING TO 100+
+    ['ATOM/USDT', 'USDT'], ['UNI/USDT', 'USDT'], ['ETC/USDT', 'USDT'], ['FIL/USDT', 'USDT'], ['NEAR/USDT', 'USDT'],
+    ['VET/USDT', 'USDT'], ['MKR/USDT', 'USDT'], ['AAVE/USDT', 'USDT'], ['SNX/USDT', 'USDT'], ['ALGO/USDT', 'USDT'],
+    ['AXS/USDT', 'USDT'], ['SAND/USDT', 'USDT'], ['MANA/USDT', 'USDT'], ['EOS/USDT', 'USDT'], ['THETA/USDT', 'USDT'],
+    ['MEME/USDT', 'USDT'], ['ORDI/USDT', 'USDT'], ['SATS/USDT', 'USDT'], ['BOME/USDT', 'USDT'], ['DOGS/USDT', 'USDT'],
+    ['ILV/USDT', 'USDT'], ['GMT/USDT', 'USDT'], ['ENJ/USDT', 'USDT'], ['MAGIC/USDT', 'USDT'], ['PIXEL/USDT', 'USDT'],
+    ['BLUR/USDT', 'USDT'], ['ENS/USDT', 'USDT'], ['MINA/USDT', 'USDT'], ['FLOW/USDT', 'USDT'], ['CHZ/USDT', 'USDT'],
     ['KAS/USDT', 'USDT'], ['BSV/USDT', 'USDT'], ['ZEC/USDT', 'USDT'], ['DASH/USDT', 'USDT'], ['NEO/USDT', 'USDT'],
     ['QTUM/USDT', 'USDT'], ['IOTA/USDT', 'USDT'], ['XMR/USDT', 'USDT'], ['XTZ/USDT', 'USDT'], ['KAVA/USDT', 'USDT'],
-    
-    // --- TIER 7: VOLATILITY ZONES ---
-    ['RUNE/USDT', 'USDT'], ['EGLD/USDT', 'USDT'], ['FXS/USDT', 'USDT'], ['KLAY/USDT', 'USDT'], ['1INCH/USDT', 'USDT'],
     ['CAKE/USDT', 'USDT'], ['ROSE/USDT', 'USDT'], ['MASK/USDT', 'USDT'], ['JASMY/USDT', 'USDT'], ['WLD/USDT', 'USDT'],
     ['TWT/USDT', 'USDT'], ['LUNC/USDT', 'USDT'], ['USTC/USDT', 'USDT'], ['GAS/USDT', 'USDT'], ['TRB/USDT', 'USDT']
 ];
 
 const STRATEGY = {
-    timeframe: '5m',     // 5-minute candles
+    timeframe: '5m',
     period: 20,          // SMA 20
     stdDev: 2.0,         // Width 2.0
     shift: 10,           // Shift 10
-    capital: 25.0,       // Position size ($)
-    useTrendFilter: true,// EMA 50 Filter
-    takeProfitPct: 0.05, // 5% Target
-    stopLossPct: 0.025   // 2.5% Stop
+    
+    // --- NEW PORTFOLIO SETTINGS ---
+    margin: 2.50,        // Cost per trade ($2.50)
+    leverage: 10,        // 10x Leverage
+    // Position Size = Margin * Leverage = $25.00
+    
+    useTrendFilter: true,
+    takeProfitPct: 0.05, // 5% Move
+    stopLossPct: 0.025   // 2.5% Move
 };
 
 // --- 2. STATE ---
 let marketState = {}; 
-let virtualWallet = { balance: 250.00, locked: 0.00 };
+// NEW: Wallet starts at $100
+let virtualWallet = { balance: 100.00, locked: 0.00 };
 let activePositions = {}; 
 let lastProcessedCandle = {}; 
 
-// --- 3. DASHBOARD ---
+// --- 3. DASHBOARD (Updated for Manual Close) ---
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Helper to handle Manual Close requests
+app.use(express.urlencoded({ extended: true })); // Parse POST forms
+
+app.post('/close/:symbol', (req, res) => {
+    // Note: Symbol comes in encoded, e.g. BTC%2FUSDT. We decode it.
+    const symbol = decodeURIComponent(req.params.symbol);
+    const data = marketState[symbol];
+    
+    if (activePositions[symbol] && data) {
+        // Force close using the live price from marketState
+        // We assume 'data.livePrice' is updated by the loop
+        closeTrade(symbol, data.livePrice || data.close, 'MANUAL CLOSE');
+    }
+    res.redirect('/');
+});
 
 app.get('/', (req, res) => {
     // Sort logic
@@ -83,15 +99,31 @@ app.get('/', (req, res) => {
         
         let statusHtml = '<span style="color:#ccc">WAITING</span>';
         let rowStyle = '';
+        let actionHtml = '';
 
         if (pos) {
             let pnlPct = 0;
-            if (pos.type === 'LONG') pnlPct = (data.close - pos.entryPrice) / pos.entryPrice * 100;
-            else pnlPct = (pos.entryPrice - data.close) / pos.entryPrice * 100;
+            // PnL Calculation based on live price
+            const currentPrice = data.livePrice || data.close;
+            if (pos.type === 'LONG') pnlPct = (currentPrice - pos.entryPrice) / pos.entryPrice * 100 * STRATEGY.leverage;
+            else pnlPct = (pos.entryPrice - currentPrice) / pos.entryPrice * 100 * STRATEGY.leverage;
             
             const pnlColor = pnlPct >= 0 ? 'green' : 'red';
-            statusHtml = `<strong style="color:blue">${pos.type}</strong> <span style="color:${pnlColor}">(${pnlPct.toFixed(2)}%)</span>`;
+            
+            // Status shows PnL and Type
+            statusHtml = `<strong style="color:blue">${pos.type}</strong> (x${STRATEGY.leverage})<br><span style="color:${pnlColor}">${pnlPct.toFixed(2)}%</span>`;
             rowStyle = 'background-color: #f0f8ff; border-left: 5px solid blue;';
+            
+            // MANUAL CLOSE BUTTON
+            // We encode the pair name to handle the slash safely in URL
+            const safePair = encodeURIComponent(pair);
+            actionHtml = `
+                <form action="/close/${safePair}" method="POST" style="margin:0;">
+                    <button type="submit" style="background:red; color:white; border:none; padding:5px 10px; cursor:pointer; border-radius:3px;">
+                        CLOSE NOW
+                    </button>
+                </form>
+            `;
         } else {
             const trend = data.close > data.ema ? '<b style="color:green">BULL</b>' : '<b style="color:red">BEAR</b>';
             
@@ -114,6 +146,7 @@ app.get('/', (req, res) => {
                 <td style="color:#27ae60">$${data.lower.toFixed(4)}</td>
                 <td style="color:blue">$${data.mid.toFixed(4)}</td>
                 <td>${statusHtml}</td>
+                <td>${actionHtml}</td>
             </tr>
         `;
     }).join('');
@@ -129,16 +162,15 @@ app.get('/', (req, res) => {
                 .num { font-size: 1.4em; font-weight: bold; margin-top: 5px; }
                 table { width: 100%; background: white; border-collapse: collapse; font-size: 0.9em; }
                 th { background: #343a40; color: white; padding: 10px; text-align: left; position: sticky; top: 0; }
-                td { padding: 8px; border-bottom: 1px solid #eee; }
+                td { padding: 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
             </style>
         </head>
         <body>
-            <h2>🚀 Centurion Bot (Risk: 5% TP | 2.5% SL)</h2>
+            <h2>🚀 Centurion Bot ($100 Portfolio | 10x Leverage)</h2>
             <div class="stats">
                 <div class="card"><div>Balance</div><div class="num" style="color:#27ae60">$${virtualWallet.balance.toFixed(2)}</div></div>
-                <div class="card"><div>Locked</div><div class="num" style="color:#c0392b">$${virtualWallet.locked.toFixed(2)}</div></div>
+                <div class="card"><div>Locked Margin</div><div class="num" style="color:#c0392b">$${virtualWallet.locked.toFixed(2)}</div></div>
                 <div class="card"><div>Positions</div><div class="num">${Object.keys(activePositions).length}</div></div>
-                <div class="card"><div>Scanning</div><div class="num">${Object.keys(marketState).length} / ${PAIRS.length}</div></div>
             </div>
             <table>
                 <thead>
@@ -149,6 +181,7 @@ app.get('/', (req, res) => {
                         <th>Shifted Lower</th>
                         <th>Shifted Median</th>
                         <th>Status</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>${tableRows}</tbody>
@@ -162,7 +195,7 @@ app.listen(port, () => {
     console.log(`Dashboard running on port ${port}`);
 });
 
-// --- 4. MATH ENGINE (SMA Based) ---
+// --- 4. MATH ENGINE ---
 function calculateSMA(data, period) {
     if (data.length < period) return 0;
     return data.slice(-period).reduce((sum, val) => sum + val, 0) / period;
@@ -186,7 +219,7 @@ function calculateStdDev(data, period, sma) {
 
 // --- 5. TRADING ENGINE ---
 async function runPair(exchange, symbol) {
-    marketState[symbol] = { close: 0, upper: 0, lower: 0, mid: 0, ema: 0, timestamp: 0, lastHigh: 0, lastLow: 0 };
+    marketState[symbol] = { close: 0, livePrice: 0, upper: 0, lower: 0, mid: 0, ema: 0, timestamp: 0, lastHigh: 0, lastLow: 0 };
     lastProcessedCandle[symbol] = 0;
 
     while (true) {
@@ -195,79 +228,87 @@ async function runPair(exchange, symbol) {
             if (candles.length < 80) throw new Error("Not enough data");
 
             // --- INDEXING ---
-            const signalIndex = candles.length - 2; // Last closed candle
+            // 1. SIGNAL Candle (Closed): Index [length-2] -> Used for ENTRY
+            // 2. LIVE Candle (Forming): Index [length-1] -> Used for EXIT
+            
+            const signalIndex = candles.length - 2; 
             const signalCandle = candles[signalIndex];
             
-            const closePrice = signalCandle[4];
-            const highPrice  = signalCandle[2];
-            const lowPrice   = signalCandle[3];
-            const timestamp  = signalCandle[0];
+            // Closed Data (For Entry Logic)
+            const closedClose = signalCandle[4];
+            const closedHigh  = signalCandle[2];
+            const closedLow   = signalCandle[3];
+            const timestamp   = signalCandle[0];
 
-            // --- 1. SHIFTED DATA SLICE ---
+            // Live Data (For Exit Logic & Display)
+            const liveCandle = candles[candles.length - 1];
+            const livePrice  = liveCandle[4];
+
+            // --- 1. SHIFTED INDICATORS ---
             const shiftedIndex = signalIndex - STRATEGY.shift;
             const smaSlice = candles.slice(shiftedIndex - STRATEGY.period + 1, shiftedIndex + 1).map(c => c[4]);
             
-            // --- 2. CALCULATE INDICATORS ---
             const sma = calculateSMA(smaSlice, STRATEGY.period);
             const std = calculateStdDev(smaSlice, STRATEGY.period, sma);
-            
             const upper = sma + (STRATEGY.stdDev * std);
             const lower = sma - (STRATEGY.stdDev * std);
 
-            // --- 3. TREND FILTER ---
+            // --- 2. TREND FILTER ---
             const emaSlice = candles.slice(0, signalIndex + 1).map(c => c[4]);
             const trendEMA = calculateEMA(emaSlice, 50);
 
+            // Update State
             marketState[symbol] = { 
-                close: closePrice, 
+                close: closedClose, 
+                livePrice: livePrice, // Important for instant PnL check
                 upper, lower, mid: sma, ema: trendEMA, 
-                lastHigh: highPrice, lastLow: lowPrice, 
+                lastHigh: closedHigh, lastLow: closedLow, 
                 timestamp 
             };
 
             const pos = activePositions[symbol];
 
-            // --- 4. TRADE LOGIC ---
+            // --- 3. ENTRY LOGIC (STRICTLY ON CANDLE CLOSE) ---
             if (timestamp > lastProcessedCandle[symbol]) {
-                if (!pos && virtualWallet.balance - virtualWallet.locked >= STRATEGY.capital) {
+                if (!pos && virtualWallet.balance - virtualWallet.locked >= STRATEGY.margin) {
                     
-                    // LONG ENTRY
-                    if (lowPrice < lower && closePrice > lower && closePrice > trendEMA) {
-                        enterTrade(symbol, 'LONG', closePrice);
+                    // LONG: Rejection Lower + Trend
+                    if (closedLow < lower && closedClose > lower && closedClose > trendEMA) {
+                        enterTrade(symbol, 'LONG', closedClose);
                     }
-                    // SHORT ENTRY
-                    else if (highPrice > upper && closePrice < upper && closePrice < trendEMA) {
-                        enterTrade(symbol, 'SHORT', closePrice);
+                    // SHORT: Rejection Upper + Trend
+                    else if (closedHigh > upper && closedClose < upper && closedClose < trendEMA) {
+                        enterTrade(symbol, 'SHORT', closedClose);
                     }
                 }
                 lastProcessedCandle[symbol] = timestamp;
             }
 
-            // --- 5. FIXED EXIT LOGIC (5% TP / 2.5% SL) ---
+            // --- 4. EXIT LOGIC (INSTANT / LIVE PRICE) ---
+            // We use 'livePrice' (from forming candle) instead of 'closedClose'
             if (pos) {
                 if (pos.type === 'LONG') {
-                    // Targets
                     const takeProfit = pos.entryPrice * (1 + STRATEGY.takeProfitPct);
                     const stopLoss = pos.entryPrice * (1 - STRATEGY.stopLossPct);
 
-                    if (highPrice >= takeProfit) closeTrade(symbol, takeProfit, 'TAKE PROFIT (5%)');
-                    else if (lowPrice <= stopLoss) closeTrade(symbol, stopLoss, 'STOP LOSS (2.5%)'); 
+                    // Check Live Price
+                    if (livePrice >= takeProfit) closeTrade(symbol, livePrice, 'TP HIT (Live)');
+                    else if (livePrice <= stopLoss) closeTrade(symbol, livePrice, 'SL HIT (Live)'); 
                 } 
                 else if (pos.type === 'SHORT') {
-                    // Targets
                     const takeProfit = pos.entryPrice * (1 - STRATEGY.takeProfitPct);
                     const stopLoss = pos.entryPrice * (1 + STRATEGY.stopLossPct);
 
-                    if (lowPrice <= takeProfit) closeTrade(symbol, takeProfit, 'TAKE PROFIT (5%)');
-                    else if (highPrice >= stopLoss) closeTrade(symbol, stopLoss, 'STOP LOSS (2.5%)');
+                    if (livePrice <= takeProfit) closeTrade(symbol, livePrice, 'TP HIT (Live)');
+                    else if (livePrice >= stopLoss) closeTrade(symbol, livePrice, 'SL HIT (Live)');
                 }
             }
 
         } catch (e) {
-            // Ignore errors for smoothness
+            // silent catch
         }
 
-        // Delay 5-10s
+        // 5-10s delay per pair
         const delay = Math.floor(Math.random() * 5000) + 5000;
         await new Promise(r => setTimeout(r, delay));
     }
@@ -275,22 +316,30 @@ async function runPair(exchange, symbol) {
 
 // --- HELPERS ---
 function enterTrade(symbol, type, price) {
+    // Margin is $2.50, Position Size is $25.00
+    // We lock the MARGIN from the wallet
     activePositions[symbol] = { type, entryPrice: price, time: new Date() };
-    virtualWallet.locked += STRATEGY.capital;
+    virtualWallet.locked += STRATEGY.margin;
     console.log(`OPEN ${type}: ${symbol} @ $${price}`.green.bold);
 }
 
 function closeTrade(symbol, price, reason) {
     const pos = activePositions[symbol];
-    let pnl = 0;
     
+    // Leverage PnL Calculation
+    // Total Size = Margin * Leverage
+    const totalSize = STRATEGY.margin * STRATEGY.leverage; 
+    
+    let pnl = 0;
     if (pos.type === 'LONG') {
-        pnl = (price - pos.entryPrice) * (STRATEGY.capital / pos.entryPrice);
+        // PnL = (Exit - Entry) * (TotalSize / Entry)
+        pnl = (price - pos.entryPrice) * (totalSize / pos.entryPrice);
     } else {
-        pnl = (pos.entryPrice - price) * (STRATEGY.capital / pos.entryPrice);
+        // PnL = (Entry - Exit) * (TotalSize / Entry)
+        pnl = (pos.entryPrice - price) * (totalSize / pos.entryPrice);
     }
     
-    virtualWallet.locked -= STRATEGY.capital;
+    virtualWallet.locked -= STRATEGY.margin;
     virtualWallet.balance += pnl;
     delete activePositions[symbol];
     
@@ -300,7 +349,7 @@ function closeTrade(symbol, price, reason) {
 
 // --- MAIN ---
 async function main() {
-    console.log("--- LAUNCHING CENTURION BOT (FIXED RISK) ---".yellow);
+    console.log("--- LAUNCHING CENTURION BOT V2 (MANUAL CLOSE + 10x LEV) ---".yellow);
     const exchange = new ccxt.binance({
         'enableRateLimit': true,
         'options': { 'defaultType': 'future' }
